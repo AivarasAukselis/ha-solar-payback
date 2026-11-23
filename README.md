@@ -99,9 +99,27 @@ data:
   value: 2350
 ```
 
-## Dashboard
+## Dashboard card
 
-Paste `dashboard_card.yaml` into a Manual card.
+The integration ships its own card and loads it automatically: no separate
+install or resource to add. Edit a dashboard > **Add card** > search for
+**Solar & Battery Payback**. It finds its entities by itself.
+
+It shows savings this year (with today, this month and total), payback
+progress with the estimated date, the battery house/grid split with the VAT
+to report, and the current buy and feed-in prices. Tap any value for its
+history.
+
+```yaml
+type: custom:solar-payback-card
+title: Solar & Battery   # optional
+show_vat: true           # battery use + VAT section
+show_prices: true        # current prices + next rate change
+```
+
+After an update, reload the browser page once if the card looks unchanged.
+
+An entities-card alternative is in `dashboard_card.yaml`.
 
 ## Releases
 

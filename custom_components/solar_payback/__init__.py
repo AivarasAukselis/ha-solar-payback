@@ -13,6 +13,7 @@ from homeassistant.helpers.typing import ConfigType
 from .const import DOMAIN, SERVICE_SET_COUNTER
 from .coordinator import SolarPaybackCoordinator
 from .engine import COUNTER_KEYS
+from .frontend import async_register_card
 
 PLATFORMS = [Platform.SENSOR, Platform.NUMBER]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -40,6 +41,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> None | bool:
             coordinator.async_notify()
 
     hass.services.async_register(DOMAIN, SERVICE_SET_COUNTER, _set_counter, SET_COUNTER_SCHEMA)
+    await async_register_card(hass)
     return True
 
 
