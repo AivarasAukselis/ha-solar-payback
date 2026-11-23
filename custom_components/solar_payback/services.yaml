@@ -18,6 +18,7 @@ set_counter:
             - grid_export_year
             - cost_without_year
             - cost_actual_year
+            - feed_in_bonus_year
     value:
       required: true
       selector:

@@ -205,3 +205,107 @@ def test_counter_energy_replaces_power_for_grid():
     # counters with dt == 0 are still counted
     e.step(t(2026, 11, 23, 13), 0.0, Inputs(0, 0, 0, 0, 0.10), grid_import_kwh=0.1, grid_export_kwh=0.0)
     assert e.counters["grid_import_year"] == pytest.approx(4.3)
+
+
+# --------------------------------------------------------------- bonuses
+from custom_components.solar_payback.rates import BonusRule, in_window  # noqa: E402
+
+ZONNEPLAN = [
+    {"from": "2027-01-01", "energy_tax": 0.08802, "purchase_fee": 0.016529,
+     "feed_in_credit": 0.016529, "net_metering": False,
+     "feed_in_bonus": [{"name": "zonnebonus", "percent": 10, "of": "market_plus_credit",
+                        "from": "sunrise", "until": "sunset", "max_kwh_per_year": 2}]},
+]
+SUNRISE = datetime(2027, 6, 1, 5, 20, tzinfo=TZ)
+SUNSET = datetime(2027, 6, 1, 22, 0, tzinfo=TZ)
+
+
+def bonus_engine(schedule, keep_vat=False):
+    e = make_engine()
+    e.schedule = RateSchedule(parse_schedule(schedule))
+    e.export_keeps_vat = keep_vat
+    return e
+
+
+def test_bonus_parsing_and_errors():
+    r = parse_schedule(ZONNEPLAN)[0]
+    rule = r.feed_in_bonus[0]
+    assert (rule.percent, rule.of, rule.start, rule.end, rule.max_kwh_per_year) == (
+        10, "market_plus_credit", "sunrise", "sunset", 2)
+    # YAML 1.1 turns unquoted 06:00 into 360 -> accepted
+    r2 = parse_schedule([{"from": "2027-01-01", "feed_in_bonus": [{"percent": 50, "from": 360, "until": "22:00"}]}])[0]
+    assert r2.feed_in_bonus[0].start == "06:00"
+    for bad, msg in [
+        ({"percent": 0}, "between 0 and 200"),
+        ({"percent": 10, "of": "spot"}, "'of' must be"),
+        ({"percent": 10, "from": "25:00"}, "time must be"),
+        ({"percent": 10, "max_kwh_per_year": -1}, "above 0"),
+        ({"pct": 10}, "unknown field"),
+    ]:
+        with pytest.raises(RateScheduleError, match=msg):
+            parse_schedule([{"from": "2027-01-01", "feed_in_bonus": [bad]}])
+    # inherited by later periods, removable with []
+    p = parse_schedule(ZONNEPLAN + [{"from": "2027-06-01", "purchase_fee": 0.02},
+                                    {"from": "2028-01-01", "feed_in_bonus": []}])
+    assert p[1].feed_in_bonus == p[0].feed_in_bonus
+    assert p[2].feed_in_bonus == ()
+
+
+def test_in_window_variants():
+    day = BonusRule(10, start="sunrise", end="sunset")
+    assert in_window(day, datetime(2027, 6, 1, 12, 0, tzinfo=TZ), SUNRISE, SUNSET)
+    assert not in_window(day, datetime(2027, 6, 1, 23, 0, tzinfo=TZ), SUNRISE, SUNSET)
+    assert not in_window(day, datetime(2027, 6, 1, 12, 0, tzinfo=TZ), None, None)  # unknown sun
+    evening = BonusRule(50, start="06:00", end="22:00")
+    assert in_window(evening, datetime(2027, 6, 1, 21, 59, tzinfo=TZ), None, None)
+    assert not in_window(evening, datetime(2027, 6, 1, 22, 0, tzinfo=TZ), None, None)
+    night = BonusRule(5, start="22:00", end="06:00")  # wraps midnight
+    assert in_window(night, datetime(2027, 6, 1, 23, 30, tzinfo=TZ), None, None)
+    assert in_window(night, datetime(2027, 6, 1, 3, 0, tzinfo=TZ), None, None)
+    assert not in_window(night, datetime(2027, 6, 1, 12, 0, tzinfo=TZ), None, None)
+    assert in_window(BonusRule(5), datetime(2027, 6, 1, 0, 0, tzinfo=TZ), None, None)  # all day
+
+
+def test_zonneplan_bonus_value_cap_and_window():
+    e = bonus_engine(ZONNEPLAN, keep_vat=True)
+    noon = datetime(2027, 6, 1, 13, 0, tzinfo=TZ)
+    # feed in 1 kWh at 10 ct spot: (0.10 + 0.016529) * 1.10 * 1.21 per kWh (private person)
+    e.step(noon, 1.0, Inputs(0, 0, 1000, 0, 0.10, SUNRISE, SUNSET))
+    expected = (0.10 + 0.016529) * 1.10 * 1.21
+    assert e.counters["savings_year"] == pytest.approx(expected)
+    assert e.counters["feed_in_bonus_year"] == pytest.approx(0.10 * 0.116529 * 1.21)
+    assert e.last.bonus_rules_active == ("zonnebonus",)
+    # 3 kWh more, only 1 kWh left under the 2 kWh cap -> bonus on 1 of 3
+    before = e.counters["feed_in_bonus_year"]
+    e.step(noon, 1.0, Inputs(0, 0, 3000, 0, 0.10, SUNRISE, SUNSET))
+    assert e.counters["feed_in_bonus_year"] - before == pytest.approx(0.10 * 0.116529 * 1.21)
+    assert e.bonus_kwh_year["zonnebonus"] == pytest.approx(2.0)
+    # cap reached: no bonus shown any more
+    e.step(noon, 0.1, Inputs(0, 0, 1000, 0, 0.10, SUNRISE, SUNSET))
+    assert e.last.bonus_rules_active == ()
+    # new year resets the cap and keeps last year's bonus
+    e.step(datetime(2028, 6, 1, 13, 0, tzinfo=TZ), 1.0, Inputs(0, 0, 1000, 0, 0.10, SUNRISE, SUNSET))
+    assert e.previous_year["feed_in_bonus"] > 0
+    assert e.bonus_kwh_year["zonnebonus"] == pytest.approx(1.0)
+
+
+def test_bonus_outside_window_and_negative_price():
+    e = bonus_engine(ZONNEPLAN)
+    night = datetime(2027, 6, 1, 23, 0, tzinfo=TZ)
+    e.step(night, 1.0, Inputs(0, 0, 1000, 0, 0.10, SUNRISE, SUNSET))
+    assert e.counters["feed_in_bonus_year"] == 0
+    # VAT-registered: spot + credit, no VAT, no bonus at night
+    assert e.counters["savings_year"] == pytest.approx(0.10 + 0.016529)
+    noon = datetime(2027, 6, 1, 13, 0, tzinfo=TZ)
+    e.step(noon, 1.0, Inputs(0, 0, 1000, 0, -0.05, SUNRISE, SUNSET))  # base < 0
+    assert e.counters["feed_in_bonus_year"] == 0
+
+
+def test_nextenergy_style_market_bonus_evening():
+    sched = [{"from": "2027-01-01", "energy_tax": 0.08802, "purchase_fee": 0.018099,
+              "net_metering": False,
+              "feed_in_bonus": [{"percent": 50, "from": "06:00", "until": "22:00", "max_kwh_per_year": 6000}]}]
+    e = bonus_engine(sched)
+    e.step(datetime(2027, 1, 15, 19, 0, tzinfo=TZ), 1.0, Inputs(2000, 0, 2000, 0, 0.20))
+    assert e.counters["savings_year"] == pytest.approx(2 * 0.20 * 1.5)
+    assert e.last.export_price == pytest.approx(0.30)

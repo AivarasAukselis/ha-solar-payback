@@ -60,29 +60,102 @@ Then fill in the two numbers on the device page:
 ## Rate schedule
 
 Edit later via the integration's **Configure** button. Each period only needs
-the fields that change. Amounts are EUR/kWh **excluding VAT**.
+the fields that change; everything else carries over from the period before.
+Amounts are EUR/kWh **excluding VAT** (supplier prices quoted incl. VAT:
+divide by 1.21).
+
+| Field | Meaning |
+|---|---|
+| `energy_tax` | Energiebelasting |
+| `purchase_fee` | Supplier markup per kWh bought (inkoopvergoeding) |
+| `feed_in_fee` | Cost per kWh fed in (terugleverkosten, verkoopvergoeding) |
+| `feed_in_credit` | Fixed amount the supplier adds per kWh fed in |
+| `vat` | VAT as a fraction, e.g. `0.21` |
+| `net_metering` | `true` while saldering applies (until 31 Dec 2026) |
+| `net_metering_includes_purchase_fee` | Supplier also nets the purchase fee on netted kWh |
+| `feed_in_bonus` | List of bonus rules (below); `[]` removes inherited bonuses |
+
+### Feed-in bonus rules
+
+| Field | Meaning | Default |
+|---|---|---|
+| `percent` | Bonus percentage, e.g. `10` | required |
+| `of` | `market` (spot price) or `market_plus_credit` (spot + `feed_in_credit`) | `market` |
+| `from` / `until` | Daily window: `'HH:MM'`, `sunrise` or `sunset` (may wrap midnight) | all day |
+| `max_kwh_per_year` | Cap per calendar year | none |
+| `only_positive` | Only when the basis is above zero | `true` |
+| `name` | Label shown on the card; also keeps the cap counter stable | |
+
+Quote times (`'06:00'`). Sunrise/sunset come from your Home Assistant location.
+The bonus earned shows in **Feed-in bonus this year**; the current bonus is an
+attribute of **Feed-in value** and is shown on the card.
+
+### Examples per supplier (dynamic contracts, from 2027)
+
+Check the supplier's current terms; these are the published terms as of
+November 2026.
 
 ```yaml
-- from: '2026-01-01'
-  energy_tax: 0.09161          # 0.11085 incl. VAT
-  purchase_fee: 0.0182         # your supplier's inkoopvergoeding
-  feed_in_fee: 0.0             # terugleverkosten
-  vat: 0.21
-  net_metering: true
-  net_metering_includes_purchase_fee: false
+# ANWB Energie: bare market price, no feed-in costs
 - from: '2027-01-01'
-  energy_tax: 0.08802          # 0.1065 incl. VAT (Belastingplan 2027, corrected)
-  feed_in_fee: 0.02            # example: check your supplier's 2027 terms
+  energy_tax: 0.08802
+  purchase_fee: 0.014876        # 0.018 incl. VAT
+  net_metering: false
+
+# Zonneplan: + 0.02 per kWh fed in, + 10% daytime, max 7,500 kWh
+- from: '2027-01-01'
+  energy_tax: 0.08802
+  purchase_fee: 0.016529        # 0.02 incl. VAT
+  feed_in_credit: 0.016529
+  net_metering: false
+  feed_in_bonus:
+    - name: zonnebonus
+      percent: 10
+      of: market_plus_credit
+      from: sunrise
+      until: sunset
+      max_kwh_per_year: 7500
+
+# NextEnergy: + 50% of market price 06:00-22:00, max 6,000 kWh
+- from: '2027-01-01'
+  energy_tax: 0.08802
+  purchase_fee: 0.018099        # 0.0219 incl. VAT
+  net_metering: false
+  feed_in_bonus:
+    - name: zonnebonus
+      percent: 50
+      from: '06:00'
+      until: '22:00'
+      max_kwh_per_year: 6000
+
+# Frank Energie: + 0.0182 per kWh fed in; + 15% daytime with Slim Terugleveren
+- from: '2027-01-01'
+  energy_tax: 0.08802
+  purchase_fee: 0.015041        # 0.0182 incl. VAT
+  feed_in_credit: 0.015041
+  net_metering: false
+  feed_in_bonus:
+    - name: terugleverbonus
+      percent: 15
+      from: sunrise
+      until: sunset
+
+# Tibber: sale fee per kWh fed in
+- from: '2027-01-01'
+  energy_tax: 0.08802
+  purchase_fee: 0.020496        # 0.0248 incl. VAT
+  feed_in_fee: 0.014876         # 0.018 incl. VAT
   net_metering: false
 ```
 
 ## Price model
 
 - Import: (spot + purchase fee + energy tax) x (1 + VAT)
-- Feed-in, net metering active (this year's export below this year's import):
-  spot income + (energy tax [+ purchase fee]) x (1 + VAT) - feed-in fee x (1 + VAT)
-- Feed-in otherwise: spot income - feed-in fee x (1 + VAT)
-- Spot income includes VAT only if "I keep the VAT on feed-in income" is on.
+- Supplier income per kWh fed in: spot + feed-in credit + bonuses
+  (incl. VAT only if "I keep the VAT on feed-in income" is on)
+- Feed-in value: supplier income - feed-in fee x (1 + VAT)
+  + while net metering applies to this kWh: (energy tax [+ purchase fee]) x (1 + VAT)
+- Net metering applies while this year's export is below this year's import.
 
 Battery split: solar feeds the house first; export while the battery
 discharges counts as battery-to-grid, up to the discharge power.

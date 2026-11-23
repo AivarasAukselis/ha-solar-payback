@@ -15,7 +15,15 @@ from .const import (
     SETTING_INVESTMENT,
     VAT_ADJUSTMENT_YEARS,
 )
-from .rates import DEFAULT_SCHEDULE, RateSchedule, export_price, import_price, parse_schedule
+from .rates import (
+    DEFAULT_SCHEDULE,
+    RateSchedule,
+    bonus_base,
+    export_price,
+    import_price,
+    in_window,
+    parse_schedule,
+)
 
 COUNTER_KEYS = (
     "battery_to_home_total",
@@ -31,6 +39,7 @@ COUNTER_KEYS = (
     "savings_tracked",
     "cost_without_year",
     "cost_actual_year",
+    "feed_in_bonus_year",
 )
 YEAR_KEYS = (
     "battery_to_home_year",
@@ -40,6 +49,7 @@ YEAR_KEYS = (
     "savings_year",
     "cost_without_year",
     "cost_actual_year",
+    "feed_in_bonus_year",
 )
 
 
@@ -52,6 +62,8 @@ class Inputs:
     grid_export_w: float
     load_w: float
     spot_excl_vat: float | None
+    sunrise: datetime | None = None  # local, today
+    sunset: datetime | None = None
 
 
 @dataclass
@@ -61,6 +73,8 @@ class LastStep:
     import_price: float | None = None
     export_price: float | None = None
     mode: str = MODE_NO_PRICE
+    bonus_per_kwh: float = 0.0  # as received (incl. VAT if you keep it)
+    bonus_rules_active: tuple[str, ...] = ()
 
 
 class Engine:
@@ -77,6 +91,10 @@ class Engine:
         self.day: str | None = data.get("day")
         self.tracking_since: str | None = data.get("tracking_since")
         self.previous_year: dict[str, Any] | None = data.get("previous_year")
+        # kWh that already earned each bonus rule this calendar year (for caps)
+        self.bonus_kwh_year: dict[str, float] = {
+            str(k): float(v) for k, v in (data.get("bonus_kwh_year") or {}).items()
+        }
         settings = data.get("settings", {})
         self.settings: dict[str, float] = {
             SETTING_INVESTMENT: float(settings.get(SETTING_INVESTMENT, 0.0)),
@@ -98,6 +116,7 @@ class Engine:
             "day": self.day,
             "tracking_since": self.tracking_since,
             "previous_year": self.previous_year,
+            "bonus_kwh_year": dict(self.bonus_kwh_year),
             "settings": dict(self.settings),
         }
 
@@ -123,9 +142,12 @@ class Engine:
                 "grid_import_kwh": round(self.counters["grid_import_year"], 3),
                 "grid_export_kwh": round(self.counters["grid_export_year"], 3),
                 "savings": round(self.counters["savings_year"], 2),
+                "feed_in_bonus": round(self.counters["feed_in_bonus_year"], 2),
+                "bonus_kwh": {k: round(v, 3) for k, v in self.bonus_kwh_year.items()},
             }
             for key in YEAR_KEYS:
                 self.counters[key] = 0.0
+            self.bonus_kwh_year = {}
             self.counters["savings_month"] = 0.0
             self.counters["savings_day"] = 0.0
             changed = True
@@ -199,17 +221,46 @@ class Engine:
             self.last = LastStep(None, None, MODE_NO_PRICE)
             return rolled
 
-        p_in = import_price(inp.spot_excl_vat, rates)
-        p_out = export_price(inp.spot_excl_vat, rates, netting, self.export_keeps_vat)
+        spot = inp.spot_excl_vat
+        vat_factor = (1 + rates.vat) if self.export_keeps_vat else 1.0
+
+        # Feed-in bonuses: each rule pays a % of its basis inside its daily
+        # window, only above zero (if set), until its yearly kWh cap is used.
+        bonus_now = 0.0  # per kWh if you fed in right now (excl. VAT)
+        bonus_step_eur = 0.0  # earned in this interval (excl. VAT)
+        active: list[str] = []
+        for rule in rates.feed_in_bonus:
+            if not in_window(rule, now, inp.sunrise, inp.sunset):
+                continue
+            base = bonus_base(spot, rates, rule)
+            if rule.only_positive and base <= 0:
+                continue
+            used = self.bonus_kwh_year.get(rule.key, 0.0)
+            remaining = None if rule.max_kwh_per_year is None else rule.max_kwh_per_year - used
+            if remaining is not None and remaining <= 0:
+                continue
+            per_kwh = rule.percent / 100 * base
+            bonus_now += per_kwh
+            active.append(rule.name or f"{rule.percent:g}%")
+            eligible = exp_kwh if remaining is None else min(exp_kwh, remaining)
+            if eligible > 0:
+                bonus_step_eur += per_kwh * eligible
+                self.bonus_kwh_year[rule.key] = used + eligible
+        bonus_avg = bonus_step_eur / exp_kwh if exp_kwh > 0 else 0.0
+
+        p_in = import_price(spot, rates)
+        p_out = export_price(spot, rates, netting, self.export_keeps_vat, bonus_avg)
+        p_out_now = export_price(spot, rates, netting, self.export_keeps_vat, bonus_now)
         cost_without = load_kwh * p_in
         cost_actual = imp_kwh * p_in - exp_kwh * p_out
         saving = cost_without - cost_actual
+        c["feed_in_bonus_year"] += bonus_step_eur * vat_factor
 
         for key in ("savings_total", "savings_year", "savings_month", "savings_day", "savings_tracked"):
             c[key] += saving
         c["cost_without_year"] += cost_without
         c["cost_actual_year"] += cost_actual
-        self.last = LastStep(p_in, p_out, mode)
+        self.last = LastStep(p_in, p_out_now, mode, bonus_now * vat_factor, tuple(active))
         return rolled
 
     # ----------------------------------------------------------------- results

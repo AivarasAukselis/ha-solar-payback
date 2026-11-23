@@ -85,6 +85,18 @@ def _vat_attrs(c: SolarPaybackCoordinator) -> dict[str, Any]:
     }
 
 
+def _bonus_attrs(c: SolarPaybackCoordinator) -> dict[str, Any]:
+    engine = c.engine
+    rates = engine.schedule.at(dt_util.now().date())
+    return {
+        "bonus_active": bool(engine.last.bonus_rules_active),
+        "bonus_per_kwh": round(engine.last.bonus_per_kwh, 5),
+        "bonus_rules_active": list(engine.last.bonus_rules_active),
+        "bonus_kwh_used_this_year": {k: round(v, 3) for k, v in engine.bonus_kwh_year.items()},
+        "bonus_rules": [rule.as_dict() for rule in rates.feed_in_bonus],
+    }
+
+
 def _payback_attrs(c: SolarPaybackCoordinator) -> dict[str, Any]:
     avg = c.engine.average_daily_savings(dt_util.now())
     return {
@@ -137,6 +149,7 @@ SENSORS: tuple[PaybackSensorDescription, ...] = (
     _money("savings_total", "savings_total", None),
     _money("cost_without_system_this_year", "cost_without_year", _start_of_year),
     _money("actual_cost_this_year", "cost_actual_year", _start_of_year),
+    _money("feed_in_bonus_this_year", "feed_in_bonus_year", _start_of_year),
     # Payback
     PaybackSensorDescription(
         key="payback_progress",
@@ -195,6 +208,7 @@ SENSORS: tuple[PaybackSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=4,
         value_fn=lambda c: _opt_round(c.engine.last.export_price, 5),
+        attrs_fn=_bonus_attrs,
     ),
     PaybackSensorDescription(
         key="pricing_mode",

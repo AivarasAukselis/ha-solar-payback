@@ -13,10 +13,16 @@ import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import (
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+    SUN_EVENT_SUNRISE,
+    SUN_EVENT_SUNSET,
+)
 from homeassistant.core import CALLBACK_TYPE, Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.sun import get_astral_event_date
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -79,6 +85,7 @@ class SolarPaybackCoordinator(DataUpdateCoordinator[None]):
         self._counter_last: dict[str, float] = {}
         self._last_notify: datetime | None = None
         self.input_problem: str | None = None
+        self._sun_cache: tuple[Any, datetime | None, datetime | None] | None = None
         self.grid_source: str = GRID_SOURCE_POWER
 
         options = entry.options
@@ -178,6 +185,22 @@ class SolarPaybackCoordinator(DataUpdateCoordinator[None]):
             return self._last_price
         return None
 
+    def _sun_times(self, local_now: datetime) -> tuple[datetime | None, datetime | None]:
+        """Today's local sunrise/sunset (cached per day) for bonus windows."""
+        today = local_now.date()
+        if self._sun_cache is None or self._sun_cache[0] != today:
+            try:
+                rise = get_astral_event_date(self.hass, SUN_EVENT_SUNRISE, today)
+                sets = get_astral_event_date(self.hass, SUN_EVENT_SUNSET, today)
+            except (ValueError, AttributeError):  # e.g. polar day/night
+                rise = sets = None
+            self._sun_cache = (
+                today,
+                dt_util.as_local(rise) if rise else None,
+                dt_util.as_local(sets) if sets else None,
+            )
+        return self._sun_cache[1], self._sun_cache[2]
+
     def _refresh_held(self, now: datetime) -> None:
         self._held = {key: self._read_power(key) for key in POWER_SOURCES}
         self._held_price = self._read_spot_price(now)
@@ -238,6 +261,7 @@ class SolarPaybackCoordinator(DataUpdateCoordinator[None]):
                 rolled = self.engine.rollover(local_now)
             else:
                 self.input_problem = None if self._held_price is not None else "no price"
+                sunrise, sunset = self._sun_times(local_now)
                 rolled = self.engine.step(
                     local_now,
                     dt_seconds / 3600,
@@ -247,6 +271,8 @@ class SolarPaybackCoordinator(DataUpdateCoordinator[None]):
                         grid_export_w=self._held[CONF_GRID_EXPORT],
                         load_w=self._held[CONF_HOUSE_LOAD],
                         spot_excl_vat=self._held_price,
+                        sunrise=sunrise,
+                        sunset=sunset,
                     ),
                     grid_import_kwh=imp_kwh,
                     grid_export_kwh=exp_kwh,

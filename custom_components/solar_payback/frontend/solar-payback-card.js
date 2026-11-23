@@ -4,7 +4,7 @@
  * Finds its entities by integration + translation key, so renaming entity IDs is fine.
  */
 
-const CARD_VERSION = "1.2.0";
+const CARD_VERSION = "1.3.0";
 const PLATFORM = "solar_payback";
 
 const KEYS = [
@@ -224,6 +224,10 @@ class SolarPaybackCard extends HTMLElement {
     // Prices
     let prices = "";
     if (c.show_prices) {
+      const bonus = this._state("export_value")?.attributes || {};
+      const bonusNote = bonus.bonus_active
+        ? `<span class="bonus">incl. ${esc((bonus.bonus_rules_active || []).join(" + ") || "bonus")} +${this._price(bonus.bonus_per_kwh)}</span>`
+        : "";
       prices = `
         <div class="section prices">
           <div class="price"${link("import_price")}>
@@ -233,6 +237,7 @@ class SolarPaybackCard extends HTMLElement {
           <div class="price"${link("export_value")}>
             <span class="label">Feed-in now</span>
             <span class="value">${this._price(this._num("export_value"))}<small>/kWh</small></span>
+            ${bonusNote}
           </div>
         </div>
         ${nextDate ? `<div class="foot"${link("pricing_mode")}>Rates change ${esc(nextDate)}</div>` : ""}`;
@@ -310,6 +315,7 @@ const STYLE = `<style>
   .price { display: flex; flex-direction: column; gap: 2px; }
   .price:last-child { text-align: right; }
   .price small { font-size: 11px; color: var(--secondary-text-color); margin-left: 2px; }
+  .bonus { font-size: 11px; color: var(--success-color, #43a047); }
   .foot { margin-top: 10px; font-size: 12px; color: var(--secondary-text-color); }
 </style>`;
 

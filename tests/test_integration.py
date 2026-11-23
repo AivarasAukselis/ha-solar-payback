@@ -79,7 +79,7 @@ async def test_full_flow_and_calculation(hass: HomeAssistant, frozen) -> None:
     devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
     assert len(devices) == 1 and devices[0].name == "Solar & Battery"
     entities = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
-    assert len(entities) == 22  # 20 sensors + 2 numbers
+    assert len(entities) == 23  # 21 sensors + 2 numbers
     assert all(e.device_id == devices[0].id for e in entities)
 
     # Evening: battery 2 kW powers the house, spot 0.10 excl VAT (0.121 incl)
@@ -249,3 +249,26 @@ async def test_p1_counters_and_fallback(hass: HomeAssistant, frozen) -> None:
     set_p1(hass, 1001.6, 2000.25, 100.0, 200.0)
     await tick(hass, frozen, 10)
     assert engine.counters["grid_import_year"] - before == pytest.approx(0.1 + 3 * 10 / 3600, abs=0.01)
+
+
+async def test_feed_in_bonus_in_home_assistant(hass: HomeAssistant, freezer) -> None:
+    await hass.config.async_update(time_zone="Europe/Amsterdam", latitude=52.37, longitude=4.89)
+    freezer.move_to("2027-06-01 12:00:00+02:00")
+    set_sources(hass, exp=1000, spot_incl_vat=0.121)
+    schedule = [{"from": "2027-01-01", "energy_tax": 0.08802, "net_metering": False,
+                 "feed_in_credit": 0.02,
+                 "feed_in_bonus": [{"name": "allday", "percent": 50, "from": "00:00", "until": "24:00"},
+                                   {"name": "daylight", "percent": 10, "of": "market_plus_credit",
+                                    "from": "sunrise", "until": "sunset"}]}]
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], SOURCES)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"rate_schedule": schedule})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    await tick(hass, freezer, 3600)
+    # VAT-registered: per kWh 0.10 + 0.02 + 50% x 0.10 + 10% x 0.12 = 0.182
+    value = hass.states.get("sensor.solar_battery_feed_in_value")
+    assert float(value.state) == pytest.approx(0.182, abs=1e-4)
+    assert value.attributes["bonus_rules_active"] == ["allday", "daylight"]
+    bonus = float(hass.states.get("sensor.solar_battery_feed_in_bonus_this_year").state)
+    assert bonus == pytest.approx(0.062, abs=0.005)  # 1 kWh x (0.05 + 0.012), state rounded to cents

@@ -31,7 +31,7 @@
       },
       "rates": {
         "title": "Rate schedule",
-        "description": "Each period starts on its `from` date and only needs the fields that change; the rest is copied from the period before it. Add future changes as soon as they are announced.\n\nAll amounts are **EUR per kWh excluding VAT**:\n- `energy_tax`: energiebelasting\n- `purchase_fee`: your supplier's inkoopvergoeding per kWh bought\n- `feed_in_fee`: terugleverkosten per kWh fed in\n- `vat`: as a fraction, e.g. 0.21\n- `net_metering`: true while saldering applies (ends 1 Jan 2027)\n- `net_metering_includes_purchase_fee`: true if your supplier also nets the purchase fee\n\nExample:\n```\n- from: '2026-01-01'\n  energy_tax: 0.09161\n  purchase_fee: 0.0182\n  net_metering: true\n- from: '2027-01-01'\n  energy_tax: 0.08802\n  feed_in_fee: 0.02\n  net_metering: false\n```",
+        "description": "Each period starts on its `from` date and only needs the fields that change; the rest is copied from the period before it. Add future changes as soon as they are announced.\n\nAmounts are **EUR per kWh excluding VAT**:\n- `energy_tax`: energiebelasting\n- `purchase_fee`: your supplier's inkoopvergoeding per kWh bought\n- `feed_in_fee`: terugleverkosten per kWh fed in (a cost)\n- `feed_in_credit`: fixed amount your supplier adds per kWh fed in (e.g. Zonneplan +0.02 incl. VAT = 0.016529)\n- `vat`: as a fraction, e.g. 0.21\n- `net_metering`: true while saldering applies (ends 1 Jan 2027)\n- `net_metering_includes_purchase_fee`: true if your supplier also nets the purchase fee\n- `feed_in_bonus`: list of bonus rules, each with `percent`, `of` (`market` or `market_plus_credit`), `from`/`until` ('HH:MM', `sunrise` or `sunset`), optional `max_kwh_per_year`, `only_positive` (default true) and `name`. Use `feed_in_bonus: []` to stop a bonus.\n\nExample (Zonneplan from 2027):\n```\n- from: '2027-01-01'\n  energy_tax: 0.08802\n  purchase_fee: 0.016529\n  feed_in_credit: 0.016529\n  net_metering: false\n  feed_in_bonus:\n    - name: zonnebonus\n      percent: 10\n      of: market_plus_credit\n      from: sunrise\n      until: sunset\n      max_kwh_per_year: 7500\n```\nQuote times like '06:00'.",
         "data": {
           "rate_schedule": "Rate schedule"
         }
@@ -77,7 +77,7 @@
       },
       "rates": {
         "title": "Rate schedule",
-        "description": "Each period starts on its `from` date and only needs the fields that change; the rest is copied from the period before it. Add future changes as soon as they are announced.\n\nAll amounts are **EUR per kWh excluding VAT**:\n- `energy_tax`: energiebelasting\n- `purchase_fee`: your supplier's inkoopvergoeding per kWh bought\n- `feed_in_fee`: terugleverkosten per kWh fed in\n- `vat`: as a fraction, e.g. 0.21\n- `net_metering`: true while saldering applies (ends 1 Jan 2027)\n- `net_metering_includes_purchase_fee`: true if your supplier also nets the purchase fee\n\nExample:\n```\n- from: '2026-01-01'\n  energy_tax: 0.09161\n  purchase_fee: 0.0182\n  net_metering: true\n- from: '2027-01-01'\n  energy_tax: 0.08802\n  feed_in_fee: 0.02\n  net_metering: false\n```",
+        "description": "Each period starts on its `from` date and only needs the fields that change; the rest is copied from the period before it. Add future changes as soon as they are announced.\n\nAmounts are **EUR per kWh excluding VAT**:\n- `energy_tax`: energiebelasting\n- `purchase_fee`: your supplier's inkoopvergoeding per kWh bought\n- `feed_in_fee`: terugleverkosten per kWh fed in (a cost)\n- `feed_in_credit`: fixed amount your supplier adds per kWh fed in (e.g. Zonneplan +0.02 incl. VAT = 0.016529)\n- `vat`: as a fraction, e.g. 0.21\n- `net_metering`: true while saldering applies (ends 1 Jan 2027)\n- `net_metering_includes_purchase_fee`: true if your supplier also nets the purchase fee\n- `feed_in_bonus`: list of bonus rules, each with `percent`, `of` (`market` or `market_plus_credit`), `from`/`until` ('HH:MM', `sunrise` or `sunset`), optional `max_kwh_per_year`, `only_positive` (default true) and `name`. Use `feed_in_bonus: []` to stop a bonus.\n\nExample (Zonneplan from 2027):\n```\n- from: '2027-01-01'\n  energy_tax: 0.08802\n  purchase_fee: 0.016529\n  feed_in_credit: 0.016529\n  net_metering: false\n  feed_in_bonus:\n    - name: zonnebonus\n      percent: 10\n      of: market_plus_credit\n      from: sunrise\n      until: sunset\n      max_kwh_per_year: 7500\n```\nQuote times like '06:00'.",
         "data": {
           "rate_schedule": "Rate schedule"
         }
@@ -155,6 +155,9 @@
           "no_net_metering": "No net metering",
           "no_price": "No price available"
         }
+      },
+      "feed_in_bonus_this_year": {
+        "name": "Feed-in bonus this year"
       }
     },
     "number": {
