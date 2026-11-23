@@ -1,0 +1,51 @@
+name: Test and release
+
+# Runs the tests on every push. When the version in manifest.json changes on
+# main and no tag exists for it yet, creates tag vX.Y.Z and a GitHub release,
+# which the Home Assistant Marketplace picks up as an update.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install test dependencies
+        run: pip install -r requirements_test.txt
+      - name: Run tests
+        run: pytest -q -p no:logging
+
+  release:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version from manifest.json
+        id: version
+        run: |
+          version=$(python3 -c "import json; print(json.load(open('custom_components/solar_payback/manifest.json'))['version'])")
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+      - name: Create release if this version is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, nothing to do."
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+          fi

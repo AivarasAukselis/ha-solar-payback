@@ -1,1 +1,2 @@
-pytest-homeassistant-custom-component
+# Pinned to the version the tests were written against (Home Assistant 2026.2)
+pytest-homeassistant-custom-component==0.13.316

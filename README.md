@@ -103,10 +103,16 @@ data:
 
 Paste `dashboard_card.yaml` into a Manual card.
 
+## Releases
+
+Bump `version` in `custom_components/solar_payback/manifest.json` and push to
+`main`. The GitHub Action runs the tests and, if they pass and the version is
+new, creates tag `vX.Y.Z` and a release. The Marketplace then offers the update.
+
 ## Tests
 
 ```bash
-pip install pytest-homeassistant-custom-component
+pip install -r requirements_test.txt
 pytest
 ```
 
