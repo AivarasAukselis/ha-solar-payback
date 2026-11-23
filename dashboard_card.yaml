@@ -1,0 +1,48 @@
+# Dashboard card for the Solar & Battery Payback integration
+# Dashboard > Edit > Add card > Manual -> paste everything below
+type: vertical-stack
+title: Solar + Battery
+cards:
+  - type: gauge
+    name: Payback progress
+    entity: sensor.solar_battery_payback_progress
+    min: 0
+    max: 100
+    needle: true
+    severity:
+      red: 0
+      yellow: 50
+      green: 100
+
+  - type: entities
+    title: Savings & payback
+    show_header_toggle: false
+    entities:
+      - sensor.solar_battery_savings_today
+      - sensor.solar_battery_savings_this_month
+      - sensor.solar_battery_savings_this_year
+      - sensor.solar_battery_savings_total
+      - sensor.solar_battery_payback_remaining
+      - sensor.solar_battery_estimated_payback_date
+      - sensor.solar_battery_import_price_all_in
+      - sensor.solar_battery_feed_in_value
+      - sensor.solar_battery_pricing_mode
+
+  - type: entities
+    title: Battery VAT (private use)
+    show_header_toggle: false
+    entities:
+      - sensor.solar_battery_battery_private_use_this_year
+      - entity: sensor.solar_battery_vat_on_private_use_this_year
+        name: VAT to report (row 1d)
+      - sensor.solar_battery_battery_to_house_this_year
+      - sensor.solar_battery_battery_to_grid_this_year
+      - sensor.solar_battery_grid_import_this_year
+      - sensor.solar_battery_grid_export_this_year
+
+  - type: entities
+    title: Settings
+    show_header_toggle: false
+    entities:
+      - number.solar_battery_investment_after_vat_refund
+      - number.solar_battery_battery_cost_excl_vat

@@ -1,0 +1,185 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Source sensors",
+        "description": "Pick the sensors from your inverter and your price integration.",
+        "data": {
+          "battery_discharge_power": "Battery discharge power",
+          "grid_import_power": "Grid import power",
+          "grid_export_power": "Grid export power",
+          "house_load_power": "House consumption power",
+          "spot_price": "Spot price sensor (EUR/kWh)",
+          "spot_price_includes_vat": "Spot price sensor includes VAT",
+          "export_keeps_vat": "I keep the VAT on feed-in income",
+          "battery_in_use_year": "Year the battery was put into use",
+          "grid_import_energy": "Grid import kWh counters (optional, P1 meter)",
+          "grid_export_energy": "Grid export kWh counters (optional, P1 meter)"
+        },
+        "data_description": {
+          "battery_discharge_power": "Power sensor that is positive while the battery discharges (W or kW).",
+          "grid_import_power": "Positive while you take power from the grid.",
+          "grid_export_power": "Positive while you feed power into the grid.",
+          "house_load_power": "Your household consumption (not including battery charging).",
+          "spot_price": "Raw dynamic (spot) price per kWh, without energy tax and fees. The schedule in the next step adds those.",
+          "spot_price_includes_vat": "Turn on if the price sensor already includes 21% VAT (the EnergyZero sensors do).",
+          "export_keeps_vat": "Leave OFF if you are VAT-registered for the battery: you pass the VAT on feed-in income on to the Belastingdienst. Turn ON if you are a private person without VAT registration.",
+          "battery_in_use_year": "Start of the 5-year VAT adjustment period (herzieningsperiode). Private-use VAT is 0 outside it.",
+          "grid_import_energy": "Your smart meter's import counters, e.g. tariff 1 and tariff 2. When set, grid import/export and the money use these exact kWh instead of power x time. Leave both empty to use the power sensors.",
+          "grid_export_energy": "Your smart meter's export (produced) counters, e.g. tariff 1 and tariff 2."
+        }
+      },
+      "rates": {
+        "title": "Rate schedule",
+        "description": "Each period starts on its `from` date and only needs the fields that change; the rest is copied from the period before it. Add future changes as soon as they are announced.\n\nAll amounts are **EUR per kWh excluding VAT**:\n- `energy_tax`: energiebelasting\n- `purchase_fee`: your supplier's inkoopvergoeding per kWh bought\n- `feed_in_fee`: terugleverkosten per kWh fed in\n- `vat`: as a fraction, e.g. 0.21\n- `net_metering`: true while saldering applies (ends 1 Jan 2027)\n- `net_metering_includes_purchase_fee`: true if your supplier also nets the purchase fee\n\nExample:\n```\n- from: '2026-01-01'\n  energy_tax: 0.09161\n  purchase_fee: 0.0182\n  net_metering: true\n- from: '2027-01-01'\n  energy_tax: 0.08802\n  feed_in_fee: 0.02\n  net_metering: false\n```",
+        "data": {
+          "rate_schedule": "Rate schedule"
+        }
+      }
+    },
+    "error": {
+      "invalid_schedule": "Invalid schedule: {error}",
+      "counters_pair": "Set both import and export counters, or leave both empty."
+    },
+    "abort": {
+      "single_instance_allowed": "Already configured. Use Configure to change settings."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Source sensors",
+        "description": "Change the source sensors or VAT settings. Counters are kept.",
+        "data": {
+          "battery_discharge_power": "Battery discharge power",
+          "grid_import_power": "Grid import power",
+          "grid_export_power": "Grid export power",
+          "house_load_power": "House consumption power",
+          "spot_price": "Spot price sensor (EUR/kWh)",
+          "spot_price_includes_vat": "Spot price sensor includes VAT",
+          "export_keeps_vat": "I keep the VAT on feed-in income",
+          "battery_in_use_year": "Year the battery was put into use",
+          "grid_import_energy": "Grid import kWh counters (optional, P1 meter)",
+          "grid_export_energy": "Grid export kWh counters (optional, P1 meter)"
+        },
+        "data_description": {
+          "battery_discharge_power": "Power sensor that is positive while the battery discharges (W or kW).",
+          "grid_import_power": "Positive while you take power from the grid.",
+          "grid_export_power": "Positive while you feed power into the grid.",
+          "house_load_power": "Your household consumption (not including battery charging).",
+          "spot_price": "Raw dynamic (spot) price per kWh, without energy tax and fees. The schedule in the next step adds those.",
+          "spot_price_includes_vat": "Turn on if the price sensor already includes 21% VAT (the EnergyZero sensors do).",
+          "export_keeps_vat": "Leave OFF if you are VAT-registered for the battery: you pass the VAT on feed-in income on to the Belastingdienst. Turn ON if you are a private person without VAT registration.",
+          "battery_in_use_year": "Start of the 5-year VAT adjustment period (herzieningsperiode). Private-use VAT is 0 outside it.",
+          "grid_import_energy": "Your smart meter's import counters, e.g. tariff 1 and tariff 2. When set, grid import/export and the money use these exact kWh instead of power x time. Leave both empty to use the power sensors.",
+          "grid_export_energy": "Your smart meter's export (produced) counters, e.g. tariff 1 and tariff 2."
+        }
+      },
+      "rates": {
+        "title": "Rate schedule",
+        "description": "Each period starts on its `from` date and only needs the fields that change; the rest is copied from the period before it. Add future changes as soon as they are announced.\n\nAll amounts are **EUR per kWh excluding VAT**:\n- `energy_tax`: energiebelasting\n- `purchase_fee`: your supplier's inkoopvergoeding per kWh bought\n- `feed_in_fee`: terugleverkosten per kWh fed in\n- `vat`: as a fraction, e.g. 0.21\n- `net_metering`: true while saldering applies (ends 1 Jan 2027)\n- `net_metering_includes_purchase_fee`: true if your supplier also nets the purchase fee\n\nExample:\n```\n- from: '2026-01-01'\n  energy_tax: 0.09161\n  purchase_fee: 0.0182\n  net_metering: true\n- from: '2027-01-01'\n  energy_tax: 0.08802\n  feed_in_fee: 0.02\n  net_metering: false\n```",
+        "data": {
+          "rate_schedule": "Rate schedule"
+        }
+      }
+    },
+    "error": {
+      "invalid_schedule": "Invalid schedule: {error}",
+      "counters_pair": "Set both import and export counters, or leave both empty."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "savings_today": {
+        "name": "Savings today"
+      },
+      "savings_this_month": {
+        "name": "Savings this month"
+      },
+      "savings_this_year": {
+        "name": "Savings this year"
+      },
+      "savings_total": {
+        "name": "Savings total"
+      },
+      "cost_without_system_this_year": {
+        "name": "Cost without solar and battery this year"
+      },
+      "actual_cost_this_year": {
+        "name": "Actual electricity cost this year"
+      },
+      "payback_progress": {
+        "name": "Payback progress"
+      },
+      "payback_remaining": {
+        "name": "Payback remaining"
+      },
+      "payback_estimated_date": {
+        "name": "Estimated payback date"
+      },
+      "battery_private_use_this_year": {
+        "name": "Battery private use this year"
+      },
+      "vat_on_private_use_this_year": {
+        "name": "VAT on private use this year"
+      },
+      "battery_to_home_this_year": {
+        "name": "Battery to house this year"
+      },
+      "battery_to_grid_this_year": {
+        "name": "Battery to grid this year"
+      },
+      "battery_to_home_total": {
+        "name": "Battery to house total"
+      },
+      "battery_to_grid_total": {
+        "name": "Battery to grid total"
+      },
+      "grid_import_this_year": {
+        "name": "Grid import this year"
+      },
+      "grid_export_this_year": {
+        "name": "Grid export this year"
+      },
+      "import_price": {
+        "name": "Import price (all-in)"
+      },
+      "export_value": {
+        "name": "Feed-in value"
+      },
+      "pricing_mode": {
+        "name": "Pricing mode",
+        "state": {
+          "net_metering": "Net metering (saldering)",
+          "net_metering_surplus": "Net metering, surplus export",
+          "no_net_metering": "No net metering",
+          "no_price": "No price available"
+        }
+      }
+    },
+    "number": {
+      "investment": {
+        "name": "Investment (after VAT refund)"
+      },
+      "battery_cost_excl_vat": {
+        "name": "Battery cost excl. VAT"
+      }
+    }
+  },
+  "services": {
+    "set_counter": {
+      "name": "Set counter",
+      "description": "Set a counter to a value, e.g. to add savings or grid energy from before you installed this integration.",
+      "fields": {
+        "counter": {
+          "name": "Counter",
+          "description": "Which counter to set."
+        },
+        "value": {
+          "name": "Value",
+          "description": "New value (EUR or kWh)."
+        }
+      }
+    }
+  }
+}

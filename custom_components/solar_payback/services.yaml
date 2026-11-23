@@ -1,0 +1,28 @@
+set_counter:
+  fields:
+    counter:
+      required: true
+      selector:
+        select:
+          options:
+            - savings_total
+            - savings_year
+            - savings_month
+            - savings_day
+            - savings_tracked
+            - battery_to_home_year
+            - battery_to_grid_year
+            - battery_to_home_total
+            - battery_to_grid_total
+            - grid_import_year
+            - grid_export_year
+            - cost_without_year
+            - cost_actual_year
+    value:
+      required: true
+      selector:
+        number:
+          min: -1000000
+          max: 1000000
+          step: 0.001
+          mode: box
