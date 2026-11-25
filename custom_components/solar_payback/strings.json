@@ -14,7 +14,8 @@
           "export_keeps_vat": "I keep the VAT on feed-in income",
           "battery_in_use_year": "Year the battery was put into use",
           "grid_import_energy": "Grid import kWh counters (optional, P1 meter)",
-          "grid_export_energy": "Grid export kWh counters (optional, P1 meter)"
+          "grid_export_energy": "Grid export kWh counters (optional, P1 meter)",
+          "price_list_entity": "Price list sensor (optional)"
         },
         "data_description": {
           "battery_discharge_power": "Power sensor that is positive while the battery discharges (W or kW).",
@@ -26,7 +27,8 @@
           "export_keeps_vat": "Leave OFF if you are VAT-registered for the battery: you pass the VAT on feed-in income on to the Belastingdienst. Turn ON if you are a private person without VAT registration.",
           "battery_in_use_year": "Start of the 5-year VAT adjustment period (herzieningsperiode). Private-use VAT is 0 outside it.",
           "grid_import_energy": "Your smart meter's import counters, e.g. tariff 1 and tariff 2. When set, grid import/export and the money use these exact kWh instead of power x time. Leave both empty to use the power sensors.",
-          "grid_export_energy": "Your smart meter's export (produced) counters, e.g. tariff 1 and tariff 2."
+          "grid_export_energy": "Your smart meter's export (produced) counters, e.g. tariff 1 and tariff 2.",
+          "price_list_entity": "Only needed if you don't use EnergyZero / ANWB Energie: a sensor whose attributes hold today's and tomorrow's spot prices (raw_today/raw_tomorrow, prices or forecast). With EnergyZero installed, prices are fetched automatically. Used for exact price switching and the Predbat price forecasts."
         }
       },
       "rates": {
@@ -60,7 +62,8 @@
           "export_keeps_vat": "I keep the VAT on feed-in income",
           "battery_in_use_year": "Year the battery was put into use",
           "grid_import_energy": "Grid import kWh counters (optional, P1 meter)",
-          "grid_export_energy": "Grid export kWh counters (optional, P1 meter)"
+          "grid_export_energy": "Grid export kWh counters (optional, P1 meter)",
+          "price_list_entity": "Price list sensor (optional)"
         },
         "data_description": {
           "battery_discharge_power": "Power sensor that is positive while the battery discharges (W or kW).",
@@ -72,7 +75,8 @@
           "export_keeps_vat": "Leave OFF if you are VAT-registered for the battery: you pass the VAT on feed-in income on to the Belastingdienst. Turn ON if you are a private person without VAT registration.",
           "battery_in_use_year": "Start of the 5-year VAT adjustment period (herzieningsperiode). Private-use VAT is 0 outside it.",
           "grid_import_energy": "Your smart meter's import counters, e.g. tariff 1 and tariff 2. When set, grid import/export and the money use these exact kWh instead of power x time. Leave both empty to use the power sensors.",
-          "grid_export_energy": "Your smart meter's export (produced) counters, e.g. tariff 1 and tariff 2."
+          "grid_export_energy": "Your smart meter's export (produced) counters, e.g. tariff 1 and tariff 2.",
+          "price_list_entity": "Only needed if you don't use EnergyZero / ANWB Energie: a sensor whose attributes hold today's and tomorrow's spot prices (raw_today/raw_tomorrow, prices or forecast). With EnergyZero installed, prices are fetched automatically. Used for exact price switching and the Predbat price forecasts."
         }
       },
       "rates": {
@@ -158,6 +162,12 @@
       },
       "feed_in_bonus_this_year": {
         "name": "Feed-in bonus this year"
+      },
+      "import_price_forecast": {
+        "name": "Import price forecast"
+      },
+      "export_price_forecast": {
+        "name": "Export price forecast"
       }
     },
     "number": {

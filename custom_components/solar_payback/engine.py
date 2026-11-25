@@ -18,10 +18,9 @@ from .const import (
 from .rates import (
     DEFAULT_SCHEDULE,
     RateSchedule,
-    bonus_base,
+    active_bonuses,
     export_price,
     import_price,
-    in_window,
     parse_schedule,
 )
 
@@ -229,17 +228,11 @@ class Engine:
         bonus_now = 0.0  # per kWh if you fed in right now (excl. VAT)
         bonus_step_eur = 0.0  # earned in this interval (excl. VAT)
         active: list[str] = []
-        for rule in rates.feed_in_bonus:
-            if not in_window(rule, now, inp.sunrise, inp.sunset):
-                continue
-            base = bonus_base(spot, rates, rule)
-            if rule.only_positive and base <= 0:
-                continue
+        for rule, per_kwh in active_bonuses(
+            spot, rates, now, inp.sunrise, inp.sunset, self.bonus_kwh_year
+        ):
             used = self.bonus_kwh_year.get(rule.key, 0.0)
             remaining = None if rule.max_kwh_per_year is None else rule.max_kwh_per_year - used
-            if remaining is not None and remaining <= 0:
-                continue
-            per_kwh = rule.percent / 100 * base
             bonus_now += per_kwh
             active.append(rule.name or f"{rule.percent:g}%")
             eligible = exp_kwh if remaining is None else min(exp_kwh, remaining)
@@ -262,6 +255,35 @@ class Engine:
         c["cost_actual_year"] += cost_actual
         self.last = LastStep(p_in, p_out_now, mode, bonus_now * vat_factor, tuple(active))
         return rolled
+
+    # --------------------------------------------------------------- forecast
+    def slot_prices(
+        self,
+        when: datetime,
+        spot_excl_vat: float,
+        sunrise: datetime | None,
+        sunset: datetime | None,
+    ) -> tuple[float, float]:
+        """(import, export) EUR/kWh for a future slot starting at ``when`` (local).
+
+        Net metering is assumed to stay as it is now for the rest of this
+        year (and to apply from the start of a later year if that year's
+        rates have it). Bonuses whose yearly cap is used up are left out.
+        """
+        rates = self.schedule.at(when.date())
+        same_year = self.year is None or when.year == self.year
+        if not rates.net_metering:
+            netting = False
+        elif same_year:
+            netting = self.counters["grid_export_year"] < self.counters["grid_import_year"]
+        else:
+            netting = True
+        used = self.bonus_kwh_year if same_year else {}
+        bonus = sum(per for _, per in active_bonuses(spot_excl_vat, rates, when, sunrise, sunset, used))
+        return (
+            import_price(spot_excl_vat, rates),
+            export_price(spot_excl_vat, rates, netting, self.export_keeps_vat, bonus),
+        )
 
     # ----------------------------------------------------------------- results
     def private_use_pct(self) -> float | None:

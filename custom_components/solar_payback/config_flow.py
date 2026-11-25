@@ -20,6 +20,7 @@ from .const import (
     CONF_GRID_IMPORT,
     CONF_GRID_IMPORT_ENERGY,
     CONF_HOUSE_LOAD,
+    CONF_PRICE_LIST_ENTITY,
     CONF_RATE_SCHEDULE,
     CONF_SPOT_INCLUDES_VAT,
     CONF_SPOT_PRICE,
@@ -46,6 +47,9 @@ def _sources_schema() -> vol.Schema:
                 selector.EntitySelectorConfig(domain="sensor")
             ),
             vol.Required(CONF_SPOT_INCLUDES_VAT): selector.BooleanSelector(),
+            vol.Optional(CONF_PRICE_LIST_ENTITY): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
             vol.Required(CONF_EXPORT_KEEPS_VAT): selector.BooleanSelector(),
             vol.Required(CONF_BATTERY_IN_USE_YEAR): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=2015, max=2100, step=1, mode="box")
@@ -69,7 +73,7 @@ def _source_defaults() -> dict[str, Any]:
 def _clean_sources(user_input: dict[str, Any]) -> dict[str, Any]:
     data = dict(user_input)
     data[CONF_BATTERY_IN_USE_YEAR] = int(data[CONF_BATTERY_IN_USE_YEAR])
-    for key in (CONF_GRID_IMPORT_ENERGY, CONF_GRID_EXPORT_ENERGY):
+    for key in (CONF_GRID_IMPORT_ENERGY, CONF_GRID_EXPORT_ENERGY, CONF_PRICE_LIST_ENTITY):
         if not data.get(key):
             data.pop(key, None)
     return data

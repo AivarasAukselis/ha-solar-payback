@@ -4,7 +4,7 @@
  * Finds its entities by integration + translation key, so renaming entity IDs is fine.
  */
 
-const CARD_VERSION = "1.3.0";
+const CARD_VERSION = "1.4.0";
 const PLATFORM = "solar_payback";
 
 const KEYS = [

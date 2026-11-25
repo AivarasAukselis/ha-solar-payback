@@ -8,7 +8,7 @@ Grid import/export can come from real kWh counters (P1 meter) instead.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 import logging
 from typing import Any
 
@@ -20,7 +20,11 @@ from homeassistant.const import (
     SUN_EVENT_SUNSET,
 )
 from homeassistant.core import CALLBACK_TYPE, Event, EventStateChangedData, HomeAssistant, callback
-from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    async_track_time_change,
+    async_track_time_interval,
+)
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.sun import get_astral_event_date
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -35,6 +39,7 @@ from .const import (
     CONF_GRID_IMPORT,
     CONF_GRID_IMPORT_ENERGY,
     CONF_HOUSE_LOAD,
+    CONF_PRICE_LIST_ENTITY,
     CONF_RATE_SCHEDULE,
     CONF_SPOT_INCLUDES_VAT,
     CONF_SPOT_PRICE,
@@ -46,12 +51,16 @@ from .const import (
     MAX_GAP,
     NOTIFY_INTERVAL,
     POWER_SOURCES,
+    PRICE_SOURCE_ENERGYZERO,
+    PRICE_SOURCE_ENTITY,
+    PRICE_SOURCE_NONE,
     PRICE_MAX_AGE,
     SAVE_DELAY_SECONDS,
     STORAGE_VERSION,
     TICK_INTERVAL,
 )
 from .engine import Engine, Inputs
+from .prices import PriceSlot, fetch_energyzero_prices, read_entity_prices, slot_at
 from .rates import DEFAULT_SCHEDULE, RateSchedule, parse_schedule
 
 _LOGGER = logging.getLogger(__name__)
@@ -85,7 +94,10 @@ class SolarPaybackCoordinator(DataUpdateCoordinator[None]):
         self._counter_last: dict[str, float] = {}
         self._last_notify: datetime | None = None
         self.input_problem: str | None = None
-        self._sun_cache: tuple[Any, datetime | None, datetime | None] | None = None
+        self._sun_cache: dict[date, tuple[datetime | None, datetime | None]] = {}
+        self.price_slots: list[PriceSlot] = []
+        self.price_source: str = PRICE_SOURCE_NONE
+        self._price_list_entity: str | None = entry.options.get(CONF_PRICE_LIST_ENTITY) or None
         self.grid_source: str = GRID_SOURCE_POWER
 
         options = entry.options
@@ -122,6 +134,21 @@ class SolarPaybackCoordinator(DataUpdateCoordinator[None]):
         )
         self._unsubs.append(
             async_track_time_interval(self.hass, self._async_heartbeat, TICK_INTERVAL)
+        )
+        # Price list: refresh at every quarter hour (also switches prices on time)
+        self._unsubs.append(
+            async_track_time_change(
+                self.hass, self._async_quarter_hour, minute=[0, 15, 30, 45], second=1
+            )
+        )
+        if self._price_list_entity:
+            self._unsubs.append(
+                async_track_state_change_event(
+                    self.hass, [self._price_list_entity], self._async_price_list_changed
+                )
+            )
+        self.config_entry.async_create_background_task(
+            self.hass, self.async_refresh_prices(), f"{DOMAIN} initial price list"
         )
 
     async def async_stop(self) -> None:
@@ -169,8 +196,67 @@ class SolarPaybackCoordinator(DataUpdateCoordinator[None]):
         value, unit = reading
         return value * _ENERGY_FACTORS.get(unit, 1.0)
 
+    # ------------------------------------------------------------ price list
+    def _vat_for(self, day: date) -> float:
+        return self.engine.schedule.at(day).vat
+
+    async def async_refresh_prices(self) -> None:
+        """Reload today's/tomorrow's prices; keep the old list if this fails."""
+        slots: list[PriceSlot] | None = None
+        source = PRICE_SOURCE_NONE
+        if self._price_list_entity:
+            slots = read_entity_prices(
+                self.hass,
+                self._price_list_entity,
+                bool(self.config_entry.options.get(CONF_SPOT_INCLUDES_VAT, True)),
+                self._vat_for,
+            )
+            source = PRICE_SOURCE_ENTITY
+        else:
+            slots = await fetch_energyzero_prices(self.hass, self._vat_for)
+            source = PRICE_SOURCE_ENERGYZERO
+        if slots:
+            self.price_slots = slots
+            self.price_source = source
+        else:
+            # Drop slots that are over; keep the rest until a refresh works.
+            now = dt_util.utcnow()
+            self.price_slots = [s for s in self.price_slots if s.end > now]
+            if not self.price_slots:
+                self.price_source = PRICE_SOURCE_NONE
+
+    async def _async_quarter_hour(self, now: datetime) -> None:
+        await self.async_refresh_prices()
+        self._integrate(dt_util.utcnow())
+        self.async_notify()
+
+    @callback
+    def _async_price_list_changed(self, event: Event[EventStateChangedData]) -> None:
+        self.config_entry.async_create_background_task(
+            self.hass, self.async_refresh_prices(), f"{DOMAIN} price list update"
+        )
+
+    def forecast(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Import and export price per slot (EUR/kWh) in Predbat's raw_today format."""
+        imports: list[dict[str, Any]] = []
+        exports: list[dict[str, Any]] = []
+        for slot in self.price_slots:
+            start = dt_util.as_local(slot.start)
+            rise, sets = self._sun_times(start)
+            p_in, p_out = self.engine.slot_prices(start, slot.spot_excl_vat, rise, sets)
+            end = dt_util.as_local(slot.end).isoformat()
+            imports.append({"start": start.isoformat(), "end": end, "value": round(p_in, 5)})
+            exports.append({"start": start.isoformat(), "end": end, "value": round(p_out, 5)})
+        return imports, exports
+
     def _read_spot_price(self, now: datetime) -> float | None:
-        """Spot price in EUR/kWh excl. VAT (last good value if briefly missing)."""
+        """Spot price in EUR/kWh excl. VAT: from the price list when it covers
+        ``now`` (exact slot switching), else the price sensor (last good value
+        if briefly missing)."""
+        slot = slot_at(self.price_slots, now)
+        if slot is not None:
+            self._last_price, self._last_price_at = slot.spot_excl_vat, now
+            return slot.spot_excl_vat
         options = self.config_entry.options
         reading = self._state_float(options.get(CONF_SPOT_PRICE))
         if reading is not None:
@@ -185,21 +271,22 @@ class SolarPaybackCoordinator(DataUpdateCoordinator[None]):
             return self._last_price
         return None
 
-    def _sun_times(self, local_now: datetime) -> tuple[datetime | None, datetime | None]:
-        """Today's local sunrise/sunset (cached per day) for bonus windows."""
-        today = local_now.date()
-        if self._sun_cache is None or self._sun_cache[0] != today:
+    def _sun_times(self, local_when: datetime) -> tuple[datetime | None, datetime | None]:
+        """Local sunrise/sunset for that day (cached) for bonus windows."""
+        day = local_when.date()
+        if day not in self._sun_cache:
             try:
-                rise = get_astral_event_date(self.hass, SUN_EVENT_SUNRISE, today)
-                sets = get_astral_event_date(self.hass, SUN_EVENT_SUNSET, today)
+                rise = get_astral_event_date(self.hass, SUN_EVENT_SUNRISE, day)
+                sets = get_astral_event_date(self.hass, SUN_EVENT_SUNSET, day)
             except (ValueError, AttributeError):  # e.g. polar day/night
                 rise = sets = None
-            self._sun_cache = (
-                today,
+            if len(self._sun_cache) > 7:
+                self._sun_cache.clear()
+            self._sun_cache[day] = (
                 dt_util.as_local(rise) if rise else None,
                 dt_util.as_local(sets) if sets else None,
             )
-        return self._sun_cache[1], self._sun_cache[2]
+        return self._sun_cache[day]
 
     def _refresh_held(self, now: datetime) -> None:
         self._held = {key: self._read_power(key) for key in POWER_SOURCES}
@@ -279,6 +366,12 @@ class SolarPaybackCoordinator(DataUpdateCoordinator[None]):
                 )
 
         self._refresh_held(now)
+        if self._held_price is not None:
+            # Show the price that applies from now on (the step above used the
+            # previous reading), so displayed prices switch exactly at slot starts.
+            rise, sets = self._sun_times(local_now)
+            p_in, p_out = self.engine.slot_prices(local_now, self._held_price, rise, sets)
+            self.engine.last.import_price, self.engine.last.export_price = p_in, p_out
         self.async_save_soon()
         if (
             rolled

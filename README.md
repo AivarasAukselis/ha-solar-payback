@@ -160,6 +160,41 @@ November 2026.
 Battery split: solar feeds the house first; export while the battery
 discharges counts as battery-to-grid, up to the discharge power.
 
+## Price forecasts for Predbat
+
+The integration fetches today's and tomorrow's spot prices and applies your
+rate schedule to every slot, so Predbat plans with exactly the prices this
+integration uses for the payback figures:
+
+| Sensor | Value per slot |
+|---|---|
+| `sensor.solar_battery_import_price_forecast` | All-in buy price: (spot + purchase fee + energy tax) incl. VAT |
+| `sensor.solar_battery_export_price_forecast` | Feed-in value: spot + credit + bonuses in their time window - feed-in fee, plus tax (and fee) back while net metering applies |
+
+- State: the price of the current slot. Attribute `raw_today`: every known slot
+  (today, and tomorrow once published around 14:00) as `start`/`end`/`value`
+  in EUR/kWh, the same format as a typical EnergyZero template for Predbat.
+- Net metering is assumed to continue for the rest of the year as it is now
+  (export below import); slots from 1 January 2027 automatically use the new
+  rates, so on 31 December Predbat already sees the next day's real prices.
+- Bonuses with a yearly cap drop out of the forecast once the cap is used.
+- The lists are not stored in the recorder database.
+
+**Price source:** with the EnergyZero integration (also what Home Assistant
+uses for ANWB Energie) installed, prices are fetched automatically every
+quarter hour (excl. VAT). Otherwise pick a **Price list sensor** under
+Configure: any sensor with `raw_today`/`raw_tomorrow`, `prices` or `forecast`
+attributes (start + value/price per slot); "includes VAT" then applies to it.
+
+The same list also gives the integration its own current price, so prices
+switch exactly at the start of each slot instead of when a sensor polls.
+
+**In Predbat's `apps.yaml`,** replace your own price template sensors with the
+two forecast sensors (keep the same setting names you use now), e.g.
+`sensor.predbat_import_price_nl` -> `sensor.solar_battery_import_price_forecast`
+and `sensor.predbat_export_price_nl` -> `sensor.solar_battery_export_price_forecast`.
+The old EnergyZero template can then be removed.
+
 ## Service `solar_payback.set_counter`
 
 Set any counter, e.g. add savings or grid import/export from earlier in the

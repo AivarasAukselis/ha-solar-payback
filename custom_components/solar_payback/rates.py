@@ -349,6 +349,29 @@ def bonus_base(spot_excl_vat: float, rates: Rates, rule: BonusRule) -> float:
     return spot_excl_vat
 
 
+def active_bonuses(
+    spot_excl_vat: float,
+    rates: Rates,
+    when: datetime,
+    sunrise: datetime | None,
+    sunset: datetime | None,
+    used_kwh: dict[str, float] | None = None,
+) -> list[tuple[BonusRule, float]]:
+    """Bonus rules that pay at ``when`` (local), with their bonus per kWh excl. VAT."""
+    used_kwh = used_kwh or {}
+    out: list[tuple[BonusRule, float]] = []
+    for rule in rates.feed_in_bonus:
+        if not in_window(rule, when, sunrise, sunset):
+            continue
+        base = bonus_base(spot_excl_vat, rates, rule)
+        if rule.only_positive and base <= 0:
+            continue
+        if rule.max_kwh_per_year is not None and used_kwh.get(rule.key, 0.0) >= rule.max_kwh_per_year:
+            continue
+        out.append((rule, rule.percent / 100 * base))
+    return out
+
+
 def import_price(spot_excl_vat: float, rates: Rates) -> float:
     """All-in price per kWh bought: (spot + purchase fee + energy tax) + VAT."""
     return (spot_excl_vat + rates.purchase_fee + rates.energy_tax) * (1 + rates.vat)

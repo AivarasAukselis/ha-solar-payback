@@ -17,6 +17,11 @@ CONF_BATTERY_IN_USE_YEAR = "battery_in_use_year"
 CONF_RATE_SCHEDULE = "rate_schedule"
 CONF_GRID_IMPORT_ENERGY = "grid_import_energy"
 CONF_GRID_EXPORT_ENERGY = "grid_export_energy"
+CONF_PRICE_LIST_ENTITY = "price_list_entity"
+
+PRICE_SOURCE_ENERGYZERO = "energyzero"
+PRICE_SOURCE_ENTITY = "entity"
+PRICE_SOURCE_NONE = "none"
 
 # A single counter jump above this is treated as a meter reset/glitch.
 MAX_COUNTER_STEP_KWH = 50.0

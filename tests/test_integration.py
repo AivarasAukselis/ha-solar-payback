@@ -79,7 +79,7 @@ async def test_full_flow_and_calculation(hass: HomeAssistant, frozen) -> None:
     devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
     assert len(devices) == 1 and devices[0].name == "Solar & Battery"
     entities = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
-    assert len(entities) == 23  # 21 sensors + 2 numbers
+    assert len(entities) == 25  # 23 sensors + 2 numbers
     assert all(e.device_id == devices[0].id for e in entities)
 
     # Evening: battery 2 kW powers the house, spot 0.10 excl VAT (0.121 incl)

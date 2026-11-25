@@ -229,6 +229,9 @@ async def async_setup_entry(
     """Set up the sensors."""
     coordinator = entry.runtime_data
     async_add_entities(PaybackSensor(coordinator, desc) for desc in SENSORS)
+    async_add_entities(
+        PriceForecastSensor(coordinator, kind) for kind in ("import", "export")
+    )
 
 
 class PaybackSensor(SolarPaybackEntity, SensorEntity):
@@ -253,3 +256,43 @@ class PaybackSensor(SolarPaybackEntity, SensorEntity):
     def last_reset(self) -> datetime | None:
         fn = self.entity_description.last_reset_fn
         return fn() if fn else None
+
+
+class PriceForecastSensor(SolarPaybackEntity, SensorEntity):
+    """All-in price per slot for today and tomorrow, in Predbat's raw_today format.
+
+    State: the price of the current slot. Attribute ``raw_today`` holds every
+    known slot (today and, once published, tomorrow) as start/end/value.
+    """
+
+    _attr_native_unit_of_measurement = EUR_PER_KWH
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 4
+    _attr_icon = "mdi:chart-timeline-variant"
+    # The lists are large and change often: keep them out of the database.
+    _unrecorded_attributes = frozenset({"raw_today", "slots"})
+
+    def __init__(self, coordinator: SolarPaybackCoordinator, kind: str) -> None:
+        super().__init__(coordinator, f"{kind}_price_forecast")
+        self._index = 0 if kind == "import" else 1
+
+    def _slots(self) -> list[dict[str, Any]]:
+        return self.coordinator.forecast()[self._index]
+
+    @property
+    def native_value(self) -> float | None:
+        now = dt_util.now()
+        for slot in self._slots():
+            if datetime.fromisoformat(slot["start"]) <= now < datetime.fromisoformat(slot["end"]):
+                return slot["value"]
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        slots = self._slots()
+        return {
+            "raw_today": slots,
+            "slots": len(slots),
+            "source": self.coordinator.price_source,
+            "last_slot_end": slots[-1]["end"] if slots else None,
+        }
